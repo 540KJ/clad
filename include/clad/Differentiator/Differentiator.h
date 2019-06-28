@@ -169,5 +169,15 @@ namespace clad {
       reinterpret_cast<void (C::*) (Args..., R*)>(f) /* will be replaced by gradient*/,
       code);
   }
+
+  template<typename ArgSpec = const char *, typename R, typename... Args>
+  CladFunction<false, void, Args..., R[sizeof...(Args)][sizeof...(Args)]> __attribute__((annotate("H")))
+  hessian(R (*f)(Args...), ArgSpec args = "", const char* code = "") {
+    assert(f && "Must pass in a non-0 argument");
+    return CladFunction<false, void, Args..., R[sizeof...(Args)][sizeof...(Args)]>(
+      reinterpret_cast<void (*) (Args..., R[sizeof...(Args)][sizeof...(Args)])>(f) /* will be replaced by gradient*/,
+      code);
+  }
+
 }
 #endif // CLAD_DIFFERENTIATOR

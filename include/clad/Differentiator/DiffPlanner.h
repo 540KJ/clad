@@ -16,7 +16,8 @@ namespace clad {
   enum class DiffMode {
     unknown = 0,
     forward,
-    reverse
+    reverse,
+    hessian
   };
 
   /// A struct containing information about request to differentiate a function.
@@ -44,6 +45,8 @@ namespace clad {
     bool VerboseDiags = false;
 
     void updateCall(clang::FunctionDecl* FD, clang::Sema& SemaRef);
+
+    std::vector<clang::FunctionDecl*> Functions;
   };
 
   using DiffSchedule = llvm::SmallVector<DiffRequest, 16>;

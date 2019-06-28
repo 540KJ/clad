@@ -5,6 +5,7 @@
 #include "clang/Sema/TemplateDeduction.h"
 
 #include "llvm/Support/SaveAndRestore.h"
+#include <iostream>
 
 using namespace clang;
 
@@ -12,6 +13,7 @@ namespace clad {
   static SourceLocation noLoc;
 
   void DiffRequest::updateCall(FunctionDecl* FD, Sema& SemaRef) {
+    printf("%s\n", FD->getNameAsString().c_str());
     CallExpr* call = this->CallContext;
     // Index of "code" parameter:
     auto codeArgIdx = static_cast<int>(call->getNumArgs()) - 1;
@@ -31,6 +33,7 @@ namespace clad {
       llvm_unreachable("Trying to differentiate something unsupported");
 
     ASTContext& C = SemaRef.getASTContext();
+    printf("ads\n");
     // Create ref to generated FD.
     Expr* DRE = DeclRefExpr::Create(C, oldDRE->getQualifierLoc(), noLoc,
                                     FD, false, FD->getNameInfo(), FD->getType(),
@@ -39,6 +42,7 @@ namespace clad {
     // using call->setArg(0, DRE) seems to be sufficient,
     // though the real AST allways contains the ImplicitCastExpr (function ->
     // function ptr cast) or UnaryOp (method ptr call).
+    printf("bsd\n");
     auto oldArg = call->getArg(0);
     if (auto oldCast = dyn_cast<ImplicitCastExpr>(oldArg)) {
       // Cast function to function pointer.
@@ -92,6 +96,7 @@ namespace clad {
                               /*Pascal*/false,
                               StrTy,
                               noLoc);
+      printf("cds\n");
       Expr* newArg =
         SemaRef.ImpCastExprToType(SL,
                                   Arg->getType(),
@@ -105,12 +110,12 @@ namespace clad {
     auto CladGradientFDeclOld = call->getDirectCallee();
     auto CladGradientExprOld = call->getCallee();
     auto CladGradientFTemplate = CladGradientFDeclOld->getPrimaryTemplate();
-
+    CladGradientFTemplate->dump();
     FunctionDecl* CladGradientFDeclNew = nullptr;
     sema::TemplateDeductionInfo Info(noLoc);
     // Create/get template specialization of clad::gradient that matches
     // argument types. Result is stored to CladGradientFDeclNew.
-    SemaRef.DeduceTemplateArguments(CladGradientFTemplate,
+    Sema::TemplateDeductionResult TDR = SemaRef.DeduceTemplateArguments(CladGradientFTemplate,
                                     /* ExplicitTemplateArgs */ nullptr,
                                     /* Args */
                                     llvm::ArrayRef<Expr*>(call->getArgs(),
@@ -122,17 +127,23 @@ namespace clad {
                                     [] (llvm::ArrayRef<QualType>) {
                                       return false;
                                     });
+    std::cout << TDR << "\n";
+    Info.FirstArg.dump();
     // DeclRefExpr for new specialization.
+    // printf("%s\n", CladGradientFDeclNew->getNameAsString().c_str());
+    printf("dsc\n");
     auto CladGradientExprNew =
       SemaRef.BuildDeclRefExpr(CladGradientFDeclNew,
                                CladGradientFDeclNew->getType(),
                                CladGradientExprOld->getValueKind(),
                                CladGradientExprOld->getLocEnd()).get();
     // Add function to pointer cast.
+    printf("esc\n");
     CladGradientExprNew =
       SemaRef.CallExprUnaryConversions(CladGradientExprNew).get();
     // Replace the old clad::gradient by the new one.
     call->setCallee(CladGradientExprNew);
+    printf("fcd\n");
   }
 
   DiffCollector::DiffCollector(DeclGroupRef DGR, DiffSchedule& plans, Sema& S)
@@ -163,7 +174,7 @@ namespace clad {
     // clad::differentiate(...) __attribute__((annotate("D")))
     // TODO: why not check for its name? clad::differentiate/gradient?
     const AnnotateAttr* A = FD->getAttr<AnnotateAttr>();
-    if (A && (A->getAnnotation().equals("D") || A->getAnnotation().equals("G"))) {
+    if (A && (A->getAnnotation().equals("D") || A->getAnnotation().equals("G") || A->getAnnotation().equals("H"))) {
       // A call to clad::differentiate or clad::gradient was found.
       DeclRefExpr* DRE = getArgFunction(E);
       if (!DRE)
@@ -173,13 +184,14 @@ namespace clad {
       if (A->getAnnotation().equals("D")) {
         request.Mode = DiffMode::forward;
         llvm::APSInt derivativeOrderAPSInt
-          = FD->getTemplateSpecializationArgs()->get(0).getAsIntegral();
+        = FD->getTemplateSpecializationArgs()->get(0).getAsIntegral();
         // We know the first template spec argument is of unsigned type
         assert(derivativeOrderAPSInt.isUnsigned() && "Must be unsigned");
         unsigned derivativeOrder = derivativeOrderAPSInt.getZExtValue();
         request.RequestedDerivativeOrder = derivativeOrder;
-      }
-      else {
+      } else if (A->getAnnotation().equals("H")) {
+        request.Mode = DiffMode::hessian;
+      } else {
         request.Mode = DiffMode::reverse;
       }
       request.CallContext = E;
@@ -193,12 +205,12 @@ namespace clad {
       // FIXME: add support for nested calls to clad::differentiate/gradient
       // inside differentiated functions
       assert(!m_TopMostFD &&
-             "nested clad::differentiate/gradient are not yet supported");
+        "nested clad::differentiate/gradient are not yet supported");
       llvm::SaveAndRestore<const FunctionDecl*> saveTopMost = m_TopMostFD;
       m_TopMostFD = FD;
       TraverseDecl(derivedFD);
       m_DiffPlans.push_back(std::move(request));
-    }
+      }
     /*else if (m_TopMostFD) {
       // If another function is called inside differentiated function,
       // this will be handled by Forward/ReverseModeVisitor::Derive.
