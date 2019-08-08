@@ -84,6 +84,12 @@ namespace clad {
     return result;
   }
 
+  FunctionDecl* VisitorBase::createFunctionDecl(const FunctionDecl* FD,
+                                                const DiffRequest& request) {
+    auto derivativeBaseName = FD->getNameAsString();
+
+  }
+
   DiffParams VisitorBase::parseDiffArgs(const Expr* diffArgs,
                                         const FunctionDecl* FD) {
     DiffParams params{};
